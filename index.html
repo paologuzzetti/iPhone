@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Frecce 3D">
+  <meta name="theme-color" content="#0f2b33">
+  <title>Frecce 3D</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- Schermata iniziale -->
+  <section id="home" class="screen">
+    <div class="home-inner">
+      <div class="logo" aria-hidden="true"></div>
+      <h1>Frecce 3D</h1>
+      <p class="tagline">Ruota il solido, tocca le frecce, liberale tutte.</p>
+      <div class="diff-picker" role="radiogroup" aria-label="Difficoltà">
+        <button data-diff="facile">Facile</button>
+        <button data-diff="normale">Normale</button>
+        <button data-diff="difficile">Difficile</button>
+      </div>
+      <button id="play" class="big-btn">Gioca</button>
+      <button id="howto-btn" class="link-btn">Come si gioca</button>
+    </div>
+  </section>
+
+  <!-- HUD di gioco -->
+  <section id="hud" class="hidden">
+    <header class="top">
+      <button id="back" class="icon-btn" aria-label="Indietro">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <div id="level-title">Livello 1</div>
+      <button id="settings-btn" class="icon-btn" aria-label="Impostazioni">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </header>
+    <div class="stats">
+      <div class="pill" title="Frecce rimaste">
+        <svg viewBox="0 0 24 24" class="pill-ico"><path d="M4 20L18 6M18 6h-8M18 6v8"/></svg>
+        <span id="remaining">0</span>
+      </div>
+      <div id="hearts" aria-label="Vite"></div>
+      <div class="pill" id="diff-label">Normale</div>
+    </div>
+    <footer class="bottom">
+      <button id="recenter" class="round-btn small" aria-label="Riallinea vista">
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+      </button>
+      <button id="hint" class="round-btn" aria-label="Suggerimento">
+        <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+        <span id="hint-count" class="badge">3</span>
+      </button>
+      <button id="restart" class="round-btn small" aria-label="Ricomincia livello">
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg>
+      </button>
+    </footer>
+  </section>
+
+  <!-- Finestre -->
+  <div id="modal" class="modal hidden">
+    <div class="card">
+      <h2 id="modal-title"></h2>
+      <p id="modal-text"></p>
+      <div id="modal-actions"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
