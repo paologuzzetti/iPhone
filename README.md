@@ -13,7 +13,7 @@ Ruota il solido con le dita e tocca le frecce per liberarle.
 
 ## Comandi
 - Trascina: ruota il solido (con inerzia)
-- Pizzica / rotella: zoom
+- Due dita: pizzica per ingrandire verso il punto toccato, trascina per spostare la vista (rotella su computer)
 - Tocca: libera una freccia
 - Pulsante cubo: riallinea la vista. Pulsante freccia circolare: ricomincia il livello.
 

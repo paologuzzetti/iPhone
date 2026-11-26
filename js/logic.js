@@ -105,7 +105,7 @@ export function generate({ dims, seed, minLen, maxLen, turn }) {
   const arrows = [];
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-  for (let pass = 0; pass < 6; pass++) {
+  for (let pass = 0; pass < 12; pass++) {
     let placed = 0;
     const order = shuffle([...Array(N).keys()], r);
     for (const h of order) {
@@ -169,10 +169,11 @@ export function blocker(board, occ, arrow) {
   return null;
 }
 
+// min/max = lato di base del solido (in caselle); grow = ogni quanti livelli cresce.
 export const DIFFICULTIES = {
-  facile:    { label: 'Facile',    min: 3, max: 5, grow: 6, minLen: 2, maxLen: 4,  turn: 0.35 },
-  normale:   { label: 'Normale',   min: 4, max: 7, grow: 5, minLen: 2, maxLen: 7,  turn: 0.45 },
-  difficile: { label: 'Difficile', min: 5, max: 9, grow: 4, minLen: 3, maxLen: 10, turn: 0.55 },
+  facile:    { label: 'Facile',    min: 4, max: 9,  grow: 3, minLen: 2, maxLen: 6,  turn: 0.4 },
+  normale:   { label: 'Normale',   min: 7, max: 13, grow: 3, minLen: 2, maxLen: 9,  turn: 0.45 },
+  difficile: { label: 'Difficile', min: 9, max: 16, grow: 2, minLen: 3, maxLen: 12, turn: 0.55 },
 };
 
 export function levelParams(level, diffKey) {
@@ -181,9 +182,9 @@ export function levelParams(level, diffKey) {
   const seed = level * 7919 + di * 104729 + 17;
   const r = rng(seed ^ 0x5bd1e995);
   const base = Math.min(d.max, d.min + Math.floor((level - 1) / d.grow));
-  const dims = [0, 0, 0].map(() => {
-    const v = base + Math.floor(r() * 3) - 1;
-    return Math.max(2, Math.min(d.max + 1, v));
-  });
+  // forme varie: cubi, parallelepipedi allungati o lastre schiacciate
+  const dims = [0, 0, 0].map(() => base + Math.floor(r() * 5) - 2);
+  if (r() < 0.3) dims[Math.floor(r() * 3)] = Math.ceil(base / 2);
+  for (let k = 0; k < 3; k++) dims[k] = Math.max(3, Math.min(d.max + 2, dims[k]));
   return { dims, seed, minLen: d.minLen, maxLen: d.maxLen, turn: d.turn };
 }

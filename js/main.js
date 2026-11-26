@@ -33,7 +33,9 @@ scene.add(pivot);
 let content = null; // figlio di pivot, contiene solido + frecce, spostato di -dims/2
 let boxMesh = null;
 const DEFAULT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.55, -0.65, 0, 'XYZ'));
-let baseDist = 12, zoom = 1;
+let baseDist = 12, zoom = 1, zoomMin = 0.3;
+let panGoal = null; // spostamento automatico della vista
+const ZOOM_MAX = 1.6;
 let targetQ = null; // rotazione automatica (suggerimento / riallinea)
 
 function resize() {
@@ -50,6 +52,8 @@ function fitCamera() {
   const vf = THREE.MathUtils.degToRad(camera.fov);
   const hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
   baseDist = (radius / Math.sin(Math.min(vf, hf) / 2)) * 1.08;
+  // da vicino la faccia più grande riempie lo schermo: le frecce si toccano facilmente
+  zoomMin = Math.min(0.6, (radius + 2) / baseDist);
 }
 window.addEventListener('resize', resize);
 
@@ -190,7 +194,8 @@ function loadLevel() {
 
   game = { level, board, arrows, occ, items, remaining: arrows.length, hearts: MAX_HEARTS, hints: HINTS_PER_LEVEL, playing: true, moving: 0 };
   pivot.quaternion.copy(DEFAULT_Q);
-  zoom = 1; targetQ = null;
+  zoom = 1; targetQ = null; panGoal = null;
+  camera.position.x = 0; camera.position.y = 0;
   fitCamera();
   updateHud();
 }
@@ -203,7 +208,8 @@ const qTmp = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
 
 function rotateBy(dx, dy) {
-  const k = 0.0085;
+  // più lenta quando si è vicini, per una rotazione precisa
+  const k = 0.0085 * THREE.MathUtils.clamp(camera.position.z / baseDist, 0.3, 1);
   qTmp.setFromAxisAngle(AY, dx * k); pivot.quaternion.premultiply(qTmp);
   qTmp.setFromAxisAngle(AX, dy * k); pivot.quaternion.premultiply(qTmp);
 }
@@ -214,7 +220,11 @@ canvas.addEventListener('pointerdown', (e) => {
   targetQ = null;
   velocity = { x: 0, y: 0 };
   if (pointers.size === 1) drag = { x0: e.clientX, y0: e.clientY, moved: false, t: performance.now() };
-  else if (pointers.size === 2) { drag = { pinch: pinchDist(), zoom0: zoom, moved: true }; }
+  else if (pointers.size === 2) {
+    const m = midpoint();
+    drag = { pinch: pinchDist(), zoom0: camera.position.z / baseDist, mx: m.x, my: m.y, moved: true };
+    panGoal = null;
+  }
 });
 canvas.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
@@ -222,7 +232,11 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   p.x = e.clientX; p.y = e.clientY;
   if (pointers.size >= 2 && drag.pinch) {
-    zoom = THREE.MathUtils.clamp(drag.zoom0 * (drag.pinch / pinchDist()), 0.45, 2.2);
+    // zoom verso il punto tra le due dita + spostamento della vista
+    const m = midpoint();
+    zoomAt(m.x, m.y, drag.zoom0 * (drag.pinch / pinchDist()));
+    panBy(m.x - drag.mx, m.y - drag.my);
+    drag.mx = m.x; drag.my = m.y;
     return;
   }
   if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 7) drag.moved = true;
@@ -240,10 +254,43 @@ const endPointer = (e) => {
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom = THREE.MathUtils.clamp(zoom * Math.exp(e.deltaY * 0.001), 0.45, 2.2); }, { passive: false });
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  panGoal = null;
+  zoomAt(e.clientX, e.clientY, (camera.position.z / baseDist) * Math.exp(e.deltaY * 0.0015));
+}, { passive: false });
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
+function midpoint() {
+  const [a, b] = [...pointers.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+// Profondità indicativa della superficie verso la telecamera.
+const surfaceDepth = () => (game ? Math.min(...game.board.dims) / 2 : 0);
+function zoomAt(px, py, z) {
+  zoom = THREE.MathUtils.clamp(z, zoomMin, ZOOM_MAX);
+  const oldD = camera.position.z, newD = baseDist * zoom;
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const nx = (px / window.innerWidth) * 2 - 1, ny = -(py / window.innerHeight) * 2 + 1;
+  camera.position.x += nx * t * camera.aspect * (oldD - newD);
+  camera.position.y += ny * t * (oldD - newD);
+  camera.position.z = newD;
+  clampPan();
+}
+function panBy(dx, dy) {
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const k = (Math.max(0.5, camera.position.z - surfaceDepth()) * t) / (window.innerHeight / 2);
+  camera.position.x -= dx * k;
+  camera.position.y += dy * k;
+  clampPan();
+}
+function clampPan() {
+  if (!game) return;
+  const r = 0.5 * Math.hypot(...game.board.dims);
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -r, r);
+  camera.position.y = THREE.MathUtils.clamp(camera.position.y, -r, r);
+}
 function pinchDist() {
   const [a, b] = [...pointers.values()];
   return Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
@@ -340,6 +387,7 @@ function useHint() {
   const head = game.board.cells[it.a.cells[it.a.cells.length - 1]];
   const nWorld = V(head.n).applyQuaternion(pivot.quaternion).normalize();
   const want = new THREE.Vector3(0.15, 0.35, 1).normalize();
+  zoom = 1; panGoal = { x: 0, y: 0 };
   if (nWorld.dot(want) < 0.8) {
     targetQ = new THREE.Quaternion().setFromUnitVectors(nWorld, want).multiply(pivot.quaternion);
   }
@@ -370,7 +418,12 @@ function frame(now) {
   const dist = baseDist * zoom;
   const yOff = isHome() ? -baseDist * 0.16 : 0;
   pivot.position.y += (-yOff - pivot.position.y) * (1 - Math.pow(0.001, dt));
-  camera.position.z += (dist - camera.position.z) * (1 - Math.pow(0.0005, dt));
+  if (pointers.size < 2) camera.position.z += (dist - camera.position.z) * (1 - Math.pow(0.0005, dt));
+  if (panGoal) {
+    const f = 1 - Math.pow(0.0005, dt);
+    camera.position.x += (panGoal.x - camera.position.x) * f;
+    camera.position.y += (panGoal.y - camera.position.y) * f;
+  }
 
   if (game) {
     for (const it of game.items) {
@@ -516,11 +569,12 @@ document.querySelectorAll('.diff-picker button').forEach((b) => b.addEventListen
 $('play').onclick = startGame;
 $('back').onclick = goHome;
 $('hint').onclick = useHint;
-$('recenter').onclick = () => { targetQ = DEFAULT_Q.clone(); zoom = 1; };
+$('recenter').onclick = () => { targetQ = DEFAULT_Q.clone(); zoom = 1; panGoal = { x: 0, y: 0 }; };
 $('restart').onclick = () => { loadLevel(); toast('Livello ricominciato'); };
 
 const HOWTO = 'Ogni freccia scorre solo nel verso in cui punta.\n\n' +
-  '• Trascina per ruotare il solido, pizzica per lo zoom.\n' +
+  '• Trascina con un dito per ruotare il solido.\n' +
+  '• Pizzica con due dita per ingrandire e trascina con due dita per spostare la vista.\n' +
   '• Tocca una freccia: se la strada fino al bordo della faccia è libera, vola via.\n' +
   '• Se incontra un\'altra freccia si scontra e perdi una vita.\n' +
   '• Le frecce possono piegarsi e girare attorno agli spigoli.\n' +
