@@ -358,9 +358,9 @@ export function blocker(board, occ, arrow) {
 // min/max = lato indicativo del solido; grow = ogni quanti livelli cresce;
 // h0/h1 = difficoltà al primo livello e massima; hRate = aumento per livello.
 export const DIFFICULTIES = {
-  facile:    { label: 'Facile',    min: 6,  max: 11, grow: 3, minLen: 2, maxLen: 7,  turn: 0.5,  h0: 0.25, h1: 0.7, hRate: 0.025 },
-  normale:   { label: 'Normale',   min: 10, max: 16, grow: 3, minLen: 2, maxLen: 11, turn: 0.6,  h0: 0.75, h1: 1,   hRate: 0.035 },
-  difficile: { label: 'Difficile', min: 12, max: 20, grow: 2, minLen: 3, maxLen: 14, turn: 0.65, h0: 1,    h1: 1,   hRate: 0.03 },
+  facile:    { label: 'Facile',    min: 7,  max: 13, grow: 3, minLen: 2, maxLen: 7,  turn: 0.5,  h0: 0.3,  h1: 0.75, hRate: 0.025 },
+  normale:   { label: 'Normale',   min: 12, max: 22, grow: 3, minLen: 2, maxLen: 11, turn: 0.6,  h0: 0.8,  h1: 1,    hRate: 0.035 },
+  difficile: { label: 'Difficile', min: 17, max: 32, grow: 2, minLen: 2, maxLen: 12, turn: 0.65, h0: 1,    h1: 1,    hRate: 0.03 },
 };
 
 export function levelParams(level, diffKey) {

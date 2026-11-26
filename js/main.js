@@ -180,10 +180,26 @@ function buildArrowGeometry(track, s) {
 }
 
 // ---------------------------------------------------------------- livello
-function loadLevel() {
+// I livelli grandi richiedono un attimo: si mostra "Costruisco il livello…"
+// e l'ultimo livello generato resta in memoria (ricomincia = istantaneo).
+let genCache = { key: null, data: null };
+let loadToken = 0;
+function loadLevel(z = 1) {
   const level = save.levels[save.diff];
-  const p = levelParams(level, save.diff);
-  const { board, arrows } = generate(p);
+  const key = `${save.diff}:${level}`;
+  const token = ++loadToken;
+  if (genCache.key === key) { buildLevel(level, genCache.data, z); return; }
+  $('loading').classList.add('show');
+  setTimeout(() => {
+    const p = levelParams(level, save.diff);
+    const data = { p, ...generate(p) };
+    genCache = { key, data };
+    if (token === loadToken) buildLevel(level, data, z);
+    $('loading').classList.remove('show');
+  }, 50);
+}
+
+function buildLevel(level, { p, board, arrows }, z) {
   const occ = new Int32Array(board.cells.length).fill(-1);
   arrows.forEach((a) => a.cells.forEach((c) => (occ[c] = a.id)));
 
@@ -220,9 +236,10 @@ function loadLevel() {
 
   game = { level, shapeName: SHAPES[p.shapeKey].label, board, arrows, occ, items, remaining: arrows.length, hearts: MAX_HEARTS, hints: HINTS_PER_LEVEL, playing: true, moving: 0 };
   pivot.quaternion.copy(DEFAULT_Q);
-  zoom = 1; targetQ = null; panGoal = null;
+  zoom = z; targetQ = null; panGoal = null;
   camera.position.x = 0; camera.position.y = 0;
   fitCamera();
+  camera.position.z = baseDist * zoom;
   updateHud();
 }
 
@@ -578,8 +595,7 @@ function goHome() {
   $('hud').classList.add('hidden');
   $('home').classList.remove('hidden');
   refreshHome();
-  loadLevel();
-  zoom = 1.25;
+  loadLevel(1.25);
 }
 function startGame() {
   unlockAudio();
@@ -593,7 +609,7 @@ function refreshHome() {
 }
 
 document.querySelectorAll('.diff-picker button').forEach((b) => b.addEventListener('click', () => {
-  save.diff = b.dataset.diff; persist(); refreshHome(); loadLevel(); zoom = 1.25;
+  save.diff = b.dataset.diff; persist(); refreshHome(); loadLevel(1.25);
 }));
 $('play').onclick = startGame;
 $('back').onclick = goHome;
@@ -636,7 +652,6 @@ window.__frecce = { get game() { return game; }, camera, get content() { return 
 // ---------------------------------------------------------------- avvio
 resize();
 goHome();
-camera.position.z = baseDist * zoom;
 requestAnimationFrame(frame);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
