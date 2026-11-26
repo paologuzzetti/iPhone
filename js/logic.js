@@ -113,7 +113,7 @@ const SHAPE_CYCLE = ['cubo', 'L', 'scala', 'lastra', 'T', 'U', 'ziggurat', 'croc
 
 function rnd(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
 function thick(s) { return Math.max(2, Math.round(s / 3.5)); }
-function depth(s, r) { return Math.max(3, Math.round(s * (0.45 + r() * 0.35))); }
+function depth(s, r) { return Math.max(3, Math.round(s * (0.6 + r() * 0.35))); }
 function extrude(W, H, D, fn) { return new Shape([W, H, D], (x, y) => fn(x, y)); }
 
 // ---------------------------------------------------------------- superficie
@@ -230,7 +230,8 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
     const dirs = shuffle(board.tangents(h), r)
       .map((d) => { const p = board.rayPath(h, d); return { d, ray: p.cells, loop: p.loop }; })
       .filter((o) => !o.loop && o.ray.length >= need && !o.ray.some((c) => occ[c] >= 0))
-      .sort((a, b) => b.ray.length + r() * 3 - (a.ray.length + r() * 3));
+      .map((o) => ({ ...o, k: o.ray.length + r() * 3 }))
+      .sort((a, b) => b.k - a.k);
     for (const { d, ray } of dirs) {
       const forbidden = new Set(ray);
       const own = new Set([h]);
@@ -307,6 +308,37 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
       if (c) { place(c); placed++; }
     }
   }
+  // Allunga le code nelle caselle vuote: superficie più piena e frecce più
+  // intrecciate. Una coda può entrare in una casella solo se ogni freccia la
+  // cui strada passa di lì viene tolta dopo (cioè è stata piazzata prima):
+  // così la soluzione resta valida.
+  const ownRay = arrows.map((a) => new Set(board.ray(a.cells[a.cells.length - 1], a.dir)));
+  const cap = maxLen + 4;
+  for (let round = 0; round < 40; round++) {
+    let grown = 0;
+    for (const a of shuffle(arrows.slice(), r)) {
+      if (a.cells.length >= cap) continue;
+      const tail = a.cells[0];
+      const opts = [];
+      for (const t of board.tangents(tail)) {
+        const nb = board.neighbor(tail, t);
+        if (nb.id < 0 || occ[nb.id] >= 0 || ownRay[a.id].has(nb.id)) continue;
+        if (owners[nb.id].some((o) => o > a.id)) continue;
+        opts.push(nb.id);
+      }
+      if (!opts.length) continue;
+      // preferisce le caselle che bloccano più frecce: più intreccio
+      let x = opts[0], bk = -1;
+      for (const o of opts) {
+        const k = owners[o].length + r();
+        if (k > bk) { bk = k; x = o; }
+      }
+      a.cells.unshift(x);
+      occ[x] = a.id;
+      grown++;
+    }
+    if (!grown) break;
+  }
   return { board, arrows };
 }
 
@@ -326,9 +358,9 @@ export function blocker(board, occ, arrow) {
 // min/max = lato indicativo del solido; grow = ogni quanti livelli cresce;
 // h0/h1 = difficoltà al primo livello e massima; hRate = aumento per livello.
 export const DIFFICULTIES = {
-  facile:    { label: 'Facile',    min: 5, max: 9,  grow: 3, minLen: 2, maxLen: 6,  turn: 0.4,  h0: 0.05, h1: 0.45, hRate: 0.02 },
-  normale:   { label: 'Normale',   min: 7, max: 13, grow: 3, minLen: 2, maxLen: 9,  turn: 0.45, h0: 0.45, h1: 1,    hRate: 0.03 },
-  difficile: { label: 'Difficile', min: 9, max: 16, grow: 2, minLen: 3, maxLen: 12, turn: 0.55, h0: 0.8,  h1: 1,    hRate: 0.04 },
+  facile:    { label: 'Facile',    min: 6,  max: 11, grow: 3, minLen: 2, maxLen: 7,  turn: 0.5,  h0: 0.25, h1: 0.7, hRate: 0.025 },
+  normale:   { label: 'Normale',   min: 10, max: 16, grow: 3, minLen: 2, maxLen: 11, turn: 0.6,  h0: 0.75, h1: 1,   hRate: 0.035 },
+  difficile: { label: 'Difficile', min: 12, max: 20, grow: 2, minLen: 3, maxLen: 14, turn: 0.65, h0: 1,    h1: 1,   hRate: 0.03 },
 };
 
 export function levelParams(level, diffKey) {
