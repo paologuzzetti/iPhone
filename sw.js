@@ -1,5 +1,5 @@
 // Cache offline: una volta aperta, l'app funziona anche senza rete.
-const CACHE = 'frecce3d-v6';
+const CACHE = 'frecce3d-v7';
 const FILES = [
   './', 'index.html', 'css/style.css', 'js/main.js', 'js/logic.js',
   'vendor/three.module.min.js', 'manifest.webmanifest',

@@ -211,6 +211,10 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
   const owners = Array.from({ length: N }, () => []); // frecce la cui strada passa sulla cella
   const blockedBy = []; // per ogni freccia: quante frecce successive la bloccano
   const arrows = [];
+  // Ordine di rimozione: una freccia con chiave più alta viene tolta prima.
+  // Le frecce di riempimento vengono inserite "in mezzo" con chiavi frazionarie.
+  const key = [];
+  let topKey = -1;
   // valore di una cella per il corpo di una nuova freccia: bloccare una freccia
   // ancora libera vale molto, una già bloccata poco
   const cellValue = (id) => {
@@ -264,8 +268,10 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
     }
     return null;
   }
-  function place(c) {
+  function place(c, k = ++topKey) {
     const idx = arrows.length;
+    key.push(k);
+    topKey = Math.max(topKey, k);
     const cells = c.body.slice().reverse(); // coda -> punta
     const hit = new Set();
     cells.forEach((id) => { occ[id] = idx; owners[id].forEach((a) => hit.add(a)); });
@@ -328,7 +334,77 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
   // intrecciate. Una coda può entrare in una casella solo se ogni freccia la
   // cui strada passa di lì viene tolta dopo (cioè è stata piazzata prima):
   // così la soluzione resta valida.
-  const ownRay = arrows.map((a) => new Set(board.ray(a.cells[a.cells.length - 1], a.dir)));
+  // Riempimento "inserito": una nuova freccia può stare in mezzo all'ordine di
+  // soluzione se tutte le frecce sulla sua strada vengono tolte prima di lei
+  // (chiave più alta) e tutte quelle la cui strada passa sul suo corpo dopo
+  // (chiave più bassa). Così riempie i buchi e parte già bloccata.
+  const maxOwnerKey = (id) => {
+    let m = -Infinity;
+    for (const o of owners[id]) if (key[o] > m) m = key[o];
+    return m;
+  };
+  function buildInsert(h, allowFree, minBody) {
+    if (occ[h] >= 0) return null;
+    const dirs = shuffle(board.tangents(h), r).map((d) => {
+      const p = board.rayPath(h, d);
+      let lim = Infinity;
+      for (const c of p.cells) if (occ[c] >= 0 && key[occ[c]] < lim) lim = key[occ[c]];
+      return { d, ray: p.cells, loop: p.loop, lim };
+    }).filter((o) => !o.loop && o.ray.length >= 1 && (allowFree || o.lim < Infinity))
+      .sort((a, b) => (a.lim === Infinity) - (b.lim === Infinity));
+    for (const { d, ray, lim } of dirs) {
+      let lo = maxOwnerKey(h);
+      if (lo >= lim) continue;
+      const forbidden = new Set(ray);
+      const own = new Set([h]);
+      const body = [h];
+      const target = minLen + Math.floor(r() * (maxLen - minLen + 1));
+      let cur = h, dir = neg(d), first = true;
+      while (body.length < target) {
+        let cands;
+        if (first) cands = [dir];
+        else {
+          const side = shuffle(board.tangents(cur).filter((t) => dot(t, dir) === 0), r);
+          cands = r() < turn ? [...side, dir] : [dir, ...side];
+        }
+        first = false;
+        let moved = false;
+        for (const cd of cands) {
+          const nb = board.neighbor(cur, cd);
+          if (nb.id < 0 || occ[nb.id] >= 0 || own.has(nb.id) || forbidden.has(nb.id)) continue;
+          const m = maxOwnerKey(nb.id);
+          if (m >= lim) continue;
+          lo = Math.max(lo, m);
+          body.push(nb.id); own.add(nb.id);
+          cur = nb.id; dir = nb.dir; moved = true;
+          break;
+        }
+        if (!moved) break;
+      }
+      if (body.length < minBody) continue;
+      const k = lim === Infinity ? topKey + 1 : (Math.max(lo, lim - 1) + lim) / 2;
+      return { body, d, ray, k };
+    }
+    return null;
+  }
+  function insertFill(minBody) {
+    for (let pass = 0; pass < 3; pass++) {
+      let placed = 0;
+      for (const h of shuffle([...Array(N).keys()], r)) {
+        const c = buildInsert(h, hard < 0.8, minBody);
+        if (c) { place(c, c.k); placed++; }
+      }
+      if (!placed) break;
+    }
+  }
+  insertFill(minLen + 2); // prima frecce lunghe, poi più corte
+  insertFill(Math.min(4, minLen));
+
+  const rayCache = new Map();
+  const ownRayOf = (a) => {
+    if (!rayCache.has(a.id)) rayCache.set(a.id, new Set(board.ray(a.cells[a.cells.length - 1], a.dir)));
+    return rayCache.get(a.id);
+  };
   const cap = Math.round(maxLen * 1.5);
   for (let round = 0; round < 40; round++) {
     let grown = 0;
@@ -338,8 +414,8 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
       const opts = [];
       for (const t of board.tangents(tail)) {
         const nb = board.neighbor(tail, t);
-        if (nb.id < 0 || occ[nb.id] >= 0 || ownRay[a.id].has(nb.id)) continue;
-        if (owners[nb.id].some((o) => o > a.id)) continue;
+        if (nb.id < 0 || occ[nb.id] >= 0 || ownRayOf(a).has(nb.id)) continue;
+        if (owners[nb.id].some((o) => key[o] > key[a.id])) continue;
         opts.push(nb.id);
       }
       if (!opts.length) continue;
@@ -357,6 +433,7 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
     }
     if (!grown) break;
   }
+  insertFill(2); // ultimi buchi
   return { board, arrows };
 }
 

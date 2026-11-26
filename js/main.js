@@ -12,7 +12,7 @@ const persist = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(sav
 
 const MAX_HEARTS = 3;
 const HINTS_PER_LEVEL = 3;
-const COLORS = ['#ff6b5b', '#2bb39a', '#ffb627', '#7c6cf2', '#3a8dde', '#e45fa8', '#5cc35a', '#ff8f3d', '#21a0b8', '#b55de0'];
+const ARROW_COLOR = '#25333a'; // tutte uguali: niente aiuti dal colore
 
 let game = null; // { board, arrows, occ, items, remaining, hearts, hints, playing }
 
@@ -66,9 +66,6 @@ function tileTexture() {
   const g = cv.getContext('2d');
   g.fillStyle = '#efe6d6';
   g.fillRect(0, 0, px, px);
-  g.strokeStyle = 'rgba(70, 90, 95, 0.09)';
-  g.lineWidth = 2;
-  g.strokeRect(0, 0, px, px);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -219,10 +216,9 @@ function buildLevel(level, { p, board, arrows }, z) {
     new THREE.LineBasicMaterial({ color: 0x3a4b4f, transparent: true, opacity: 0.45 }));
   content.add(edges);
 
-  const r = Math.random;
   const items = arrows.map((a, i) => {
     const track = buildTrack(board, a);
-    const color = new THREE.Color(COLORS[(i * 7 + Math.floor(r() * 3)) % COLORS.length]);
+    const color = new THREE.Color(ARROW_COLOR);
     const mat = new THREE.MeshLambertMaterial({
       color, side: THREE.DoubleSide, transparent: true, emissive: new THREE.Color(0x000000),
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -440,7 +436,7 @@ function clearHint() { game?.items.forEach((it) => (it.hint = false)); }
 // ---------------------------------------------------------------- loop
 let last = performance.now();
 const RED = new THREE.Color('#ff2d3d');
-const WHITE = new THREE.Color('#ffffff');
+const HINT = new THREE.Color('#ff8a5b');
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -499,8 +495,8 @@ function frame(now) {
         it.mat.color.copy(it.base).lerp(RED, Math.min(1, it.flash * 1.4));
         if (it.hint) {
           const k = 0.5 + 0.5 * Math.sin(now / 160);
-          it.mat.emissive.copy(WHITE).multiplyScalar(0.55 * k);
-        } else it.mat.emissive.setRGB(0, 0, 0);
+          it.mat.color.lerp(HINT, 0.35 + 0.65 * k);
+        }
       }
     }
   }
