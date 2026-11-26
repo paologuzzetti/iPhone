@@ -224,7 +224,7 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
 
   // Una freccia con la punta contro lo spigolo non può mai essere bloccata:
   // nei livelli difficili si chiede almeno qualche casella di strada davanti.
-  const minRay = Math.round(Math.min(1, hard) * 3);
+  const minRay = Math.round(Math.min(1, hard) * 4);
   function build(h, need = minRay) {
     if (occ[h] >= 0) return null;
     const dirs = shuffle(board.tangents(h), r)
@@ -301,19 +301,35 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
     place(best);
   }
   // riempie i buchi rimasti, accettando strade via via più corte
-  for (let need = minRay - 1; need >= Math.floor(minRay / 2); need--) {
+  // nei livelli difficili niente riempitivi: sarebbero frecce corte e libere
+  const fillTo = hard >= 0.8 ? minRay : Math.floor(minRay / 2);
+  for (let need = minRay - 1; need >= fillTo; need--) {
     let placed = 0;
     for (const h of shuffle([...Array(N).keys()], r)) {
       const c = build(h, need);
       if (c) { place(c); placed++; }
     }
   }
+  // Frecce "di sbarramento": una nuova freccia che taglia la strada di almeno
+  // due frecce ancora libere riduce il numero di frecce libere all'inizio.
+  if (hard > 0.3) {
+    for (let t = 0; t < N; t++) {
+      const h = randomFree();
+      if (h < 0) break;
+      const c = build(h, 1);
+      if (!c) continue;
+      const hit = new Set();
+      for (const id of c.body) for (const o of owners[id]) if (blockedBy[o] === 0) hit.add(o);
+      if (hit.size >= 2) place(c);
+    }
+  }
+
   // Allunga le code nelle caselle vuote: superficie più piena e frecce più
   // intrecciate. Una coda può entrare in una casella solo se ogni freccia la
   // cui strada passa di lì viene tolta dopo (cioè è stata piazzata prima):
   // così la soluzione resta valida.
   const ownRay = arrows.map((a) => new Set(board.ray(a.cells[a.cells.length - 1], a.dir)));
-  const cap = maxLen + 4;
+  const cap = Math.round(maxLen * 1.5);
   for (let round = 0; round < 40; round++) {
     let grown = 0;
     for (const a of shuffle(arrows.slice(), r)) {
@@ -328,11 +344,13 @@ export function generate({ shape, seed, minLen, maxLen, turn, hard = 0.3 }) {
       }
       if (!opts.length) continue;
       // preferisce le caselle che bloccano più frecce: più intreccio
+      // preferisce le caselle che bloccano frecce ancora libere
       let x = opts[0], bk = -1;
       for (const o of opts) {
-        const k = owners[o].length + r();
+        const k = cellValue(o) + r();
         if (k > bk) { bk = k; x = o; }
       }
+      for (const o of owners[x]) blockedBy[o]++;
       a.cells.unshift(x);
       occ[x] = a.id;
       grown++;
@@ -358,9 +376,9 @@ export function blocker(board, occ, arrow) {
 // min/max = lato indicativo del solido; grow = ogni quanti livelli cresce;
 // h0/h1 = difficoltà al primo livello e massima; hRate = aumento per livello.
 export const DIFFICULTIES = {
-  facile:    { label: 'Facile',    min: 7,  max: 13, grow: 3, minLen: 2, maxLen: 7,  turn: 0.5,  h0: 0.3,  h1: 0.75, hRate: 0.025 },
-  normale:   { label: 'Normale',   min: 12, max: 22, grow: 3, minLen: 2, maxLen: 11, turn: 0.6,  h0: 0.8,  h1: 1,    hRate: 0.035 },
-  difficile: { label: 'Difficile', min: 17, max: 32, grow: 2, minLen: 2, maxLen: 12, turn: 0.65, h0: 1,    h1: 1,    hRate: 0.03 },
+  facile:    { label: 'Facile',    min: 7,  max: 13, grow: 3, minLen: 3, maxLen: 10, turn: 0.6,  h0: 0.35, h1: 0.8, hRate: 0.025 },
+  normale:   { label: 'Normale',   min: 12, max: 22, grow: 3, minLen: 4, maxLen: 18, turn: 0.7,  h0: 0.85, h1: 1,   hRate: 0.035 },
+  difficile: { label: 'Difficile', min: 17, max: 32, grow: 2, minLen: 5, maxLen: 24, turn: 0.75, h0: 1,    h1: 1,   hRate: 0.03 },
 };
 
 export function levelParams(level, diffKey) {

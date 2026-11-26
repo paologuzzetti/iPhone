@@ -66,11 +66,9 @@ function tileTexture() {
   const g = cv.getContext('2d');
   g.fillStyle = '#efe6d6';
   g.fillRect(0, 0, px, px);
-  g.strokeStyle = 'rgba(70, 90, 95, 0.13)';
-  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(70, 90, 95, 0.09)';
+  g.lineWidth = 2;
   g.strokeRect(0, 0, px, px);
-  g.fillStyle = 'rgba(70, 90, 95, 0.22)';
-  g.beginPath(); g.arc(px / 2, px / 2, 7, 0, Math.PI * 2); g.fill();
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
