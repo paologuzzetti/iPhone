@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { generate, levelParams, blocker, DIFFICULTIES, vec } from './logic.js';
+import { generate, levelParams, blocker, DIFFICULTIES, SHAPES, vec } from './logic.js';
 
 // ---------------------------------------------------------------- stato
 const STORE_KEY = 'frecce3d.v1';
@@ -57,31 +57,49 @@ function fitCamera() {
 }
 window.addEventListener('resize', resize);
 
-// ---------------------------------------------------------------- texture facce
-function faceTexture(w, h) {
-  const px = 64;
+// ---------------------------------------------------------------- texture casella
+// Una sola mattonella ripetuta su ogni casella della superficie.
+function tileTexture() {
+  const px = 128;
   const cv = document.createElement('canvas');
-  cv.width = w * px; cv.height = h * px;
+  cv.width = cv.height = px;
   const g = cv.getContext('2d');
   g.fillStyle = '#efe6d6';
-  g.fillRect(0, 0, cv.width, cv.height);
-  g.strokeStyle = 'rgba(70, 90, 95, 0.10)';
-  g.lineWidth = 2;
-  for (let i = 1; i < w; i++) { g.beginPath(); g.moveTo(i * px, 0); g.lineTo(i * px, cv.height); g.stroke(); }
-  for (let j = 1; j < h; j++) { g.beginPath(); g.moveTo(0, j * px); g.lineTo(cv.width, j * px); g.stroke(); }
+  g.fillRect(0, 0, px, px);
+  g.strokeStyle = 'rgba(70, 90, 95, 0.13)';
+  g.lineWidth = 3;
+  g.strokeRect(0, 0, px, px);
   g.fillStyle = 'rgba(70, 90, 95, 0.22)';
-  for (let i = 0; i < w; i++) {
-    for (let j = 0; j < h; j++) {
-      g.beginPath(); g.arc(i * px + px / 2, j * px + px / 2, 3.5, 0, Math.PI * 2); g.fill();
-    }
-  }
-  g.strokeStyle = 'rgba(40, 60, 65, 0.35)';
-  g.lineWidth = 4;
-  g.strokeRect(0, 0, cv.width, cv.height);
+  g.beginPath(); g.arc(px / 2, px / 2, 7, 0, Math.PI * 2); g.fill();
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return t;
+}
+let TILE = null;
+
+// Superficie del solido: un quadrato per ogni casella.
+function buildSurface(board) {
+  const pos = [], nor = [], uv = [], idx = [];
+  for (const cell of board.cells) {
+    const a = vec.axisOf(cell.n);
+    const u = [0, 0, 0]; u[(a + 1) % 3] = 0.5;
+    const n = cell.n;
+    const v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    const base = pos.length / 3;
+    for (const [su, sv, tu, tv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
+      pos.push(cell.c[0] + u[0] * su + v[0] * sv, cell.c[1] + u[1] * su + v[1] * sv, cell.c[2] + u[2] * su + v[2] * sv);
+      nor.push(n[0], n[1], n[2]);
+      uv.push(tu, tv);
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  return geo;
 }
 
 // ---------------------------------------------------------------- geometria frecce
@@ -99,24 +117,29 @@ function buildTrack(board, arrow) {
     const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     segs.push({ a: V(a), b: V(b), n: V(n), len, edgeA, edgeB });
   };
-  for (let i = 0; i < cs.length - 1; i++) {
-    const A = cs[i], B = cs[i + 1];
+  const H = cs[cs.length - 1];
+  const rp = board.rayPath(H.id, arrow.dir);
+  const path = cs.concat(rp.cells.map((id) => board.cells[id]));
+  for (let i = 0; i < path.length - 1; i++) {
+    const A = path[i], B = path[i + 1];
     if (sameN(A.n, B.n)) push(A.c, B.c, A.n);
     else {
-      const e = vec.add(A.c, vec.scale(B.n, 0.5));
+      // spigolo (sporgente o rientrante): il punto d'incontro è sullo spigolo
+      const d = [B.c[0] - A.c[0], B.c[1] - A.c[1], B.c[2] - A.c[2]];
+      d[vec.axisOf(A.n)] = 0;
+      const e = vec.add(A.c, d);
       push(A.c, e, A.n, false, true);
       push(e, B.c, B.n, true, false);
     }
   }
-  const H = cs[cs.length - 1];
-  const m = board.ray(H.id, arrow.dir).length;
-  const edgeP = vec.add(H.c, vec.scale(arrow.dir, m + 0.5));
-  push(H.c, edgeP, H.n);
+  const L = path[path.length - 1];
+  const edgeP = vec.add(L.c, vec.scale(rp.dir, 0.5));
+  push(L.c, edgeP, L.n);
   const bodyLen = cs.length - 1;
-  push(edgeP, vec.add(edgeP, vec.scale(arrow.dir, bodyLen + 6)), H.n);
+  push(edgeP, vec.add(edgeP, vec.scale(rp.dir, bodyLen + 6)), L.n);
   let s = 0;
   for (const sg of segs) { sg.s0 = s; s += sg.len; }
-  return { segs, bodyLen, exitDist: m + 0.5 };
+  return { segs, bodyLen, exitDist: rp.cells.length + 0.5 };
 }
 
 const _d = new THREE.Vector3(), _side = new THREE.Vector3(), _lift = new THREE.Vector3();
@@ -166,18 +189,21 @@ function loadLevel() {
 
   if (content) {
     pivot.remove(content);
-    content.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => { m.map?.dispose(); m.dispose(); }); });
+    content.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
   }
   content = new THREE.Group();
   const [X, Y, Z] = board.dims;
   content.position.set(-X / 2, -Y / 2, -Z / 2);
   pivot.add(content);
 
-  const faces = [[Z, Y], [Z, Y], [X, Z], [X, Z], [X, Y], [X, Y]];
-  const mats = faces.map(([w, h]) => new THREE.MeshLambertMaterial({ map: faceTexture(w, h) }));
-  boxMesh = new THREE.Mesh(new THREE.BoxGeometry(X, Y, Z), mats);
-  boxMesh.position.set(X / 2, Y / 2, Z / 2);
+  TILE = TILE || tileTexture();
+  const surf = buildSurface(board);
+  boxMesh = new THREE.Mesh(surf, new THREE.MeshLambertMaterial({ map: TILE }));
   content.add(boxMesh);
+  // spigoli del solido in evidenza
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(surf, 30),
+    new THREE.LineBasicMaterial({ color: 0x3a4b4f, transparent: true, opacity: 0.45 }));
+  content.add(edges);
 
   const r = Math.random;
   const items = arrows.map((a, i) => {
@@ -192,7 +218,7 @@ function loadLevel() {
     return { a, track, mesh, mat, base: color.clone(), s: 0, state: 'idle', anim: null, flash: 0, hint: false };
   });
 
-  game = { level, board, arrows, occ, items, remaining: arrows.length, hearts: MAX_HEARTS, hints: HINTS_PER_LEVEL, playing: true, moving: 0 };
+  game = { level, shapeName: SHAPES[p.shapeKey].label, board, arrows, occ, items, remaining: arrows.length, hearts: MAX_HEARTS, hints: HINTS_PER_LEVEL, playing: true, moving: 0 };
   pivot.quaternion.copy(DEFAULT_Q);
   zoom = 1; targetQ = null; panGoal = null;
   camera.position.x = 0; camera.position.y = 0;
@@ -299,20 +325,22 @@ function pinchDist() {
 const raycaster = new THREE.Raycaster();
 function tap(x, y) {
   if (!game || !game.playing || isHome()) return;
-  const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(boxMesh, false)[0];
-  if (!hit) return;
-  const p = content.worldToLocal(hit.point.clone());
-  const n = hit.face.normal.toArray().map(Math.round);
-  const { dims } = game.board;
-  const c = [0, 1, 2].map((k) => n[k] !== 0 ? (n[k] > 0 ? dims[k] : 0)
-    : Math.min(dims[k] - 0.5, Math.max(0.5, Math.floor(p.getComponent(k)) + 0.5)));
-  const cell = game.board.cellAt(c, n);
+  const cell = pickCell(x, y);
   if (cell < 0) return;
   const id = game.occ[cell];
   if (id < 0) return;
   activate(game.items[id]);
+}
+// Casella della superficie sotto il punto (x, y) dello schermo, o -1.
+function pickCell(x, y) {
+  const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(boxMesh, false)[0];
+  if (!hit) return -1;
+  const p = content.worldToLocal(hit.point.clone());
+  const n = hit.face.normal.toArray().map(Math.round);
+  const c = [0, 1, 2].map((k) => n[k] !== 0 ? Math.round(p.getComponent(k)) : Math.floor(p.getComponent(k)) + 0.5);
+  return game.board.cellAt(c, n);
 }
 
 // ---------------------------------------------------------------- regole
@@ -503,7 +531,8 @@ const HEART = '<svg viewBox="0 0 24 24" class="heart"><path d="M12 21s-7.5-4.6-9
 
 function updateHud(lostHeart = false) {
   if (!game) return;
-  $('level-title').textContent = `Livello ${game.level}`;
+  $('level-name').textContent = `Livello ${game.level}`;
+  $('shape-name').textContent = game.shapeName;
   $('remaining').textContent = game.remaining;
   $('diff-label').textContent = DIFFICULTIES[save.diff].label;
   const hearts = $('hearts');
@@ -575,10 +604,11 @@ $('restart').onclick = () => { loadLevel(); toast('Livello ricominciato'); };
 const HOWTO = 'Ogni freccia scorre solo nel verso in cui punta.\n\n' +
   '• Trascina con un dito per ruotare il solido.\n' +
   '• Pizzica con due dita per ingrandire e trascina con due dita per spostare la vista.\n' +
-  '• Tocca una freccia: se la strada fino al bordo della faccia è libera, vola via.\n' +
+  '• Tocca una freccia: scorre sulla superficie (salendo anche sulle pareti interne) e vola via dal primo spigolo sporgente, se la strada è libera.\n' +
   '• Se incontra un\'altra freccia si scontra e perdi una vita.\n' +
   '• Le frecce possono piegarsi e girare attorno agli spigoli.\n' +
-  '• Libera tutte le frecce per completare il livello. Ogni livello ha sempre una soluzione.';
+  '• Libera tutte le frecce per completare il livello. Ogni livello ha sempre una soluzione.\n' +
+  '• Andando avanti i solidi cambiano forma e i livelli diventano più difficili.';
 $('howto-btn').onclick = () => showModal('Come si gioca', HOWTO, [{ label: 'Ho capito', cls: 'primary', fn: hideModal }]);
 
 $('settings-btn').onclick = () => {
@@ -601,7 +631,7 @@ $('settings-btn').onclick = () => {
 };
 
 // accesso per test automatici
-window.__frecce = { get game() { return game; }, camera, get content() { return content; }, tapCell(id) { activate(game.items[game.occ[id]]); } };
+window.__frecce = { get game() { return game; }, camera, get content() { return content; }, tapCell(id) { activate(game.items[game.occ[id]]); }, pickCell };
 
 // ---------------------------------------------------------------- avvio
 resize();

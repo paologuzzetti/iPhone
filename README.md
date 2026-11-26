@@ -1,14 +1,19 @@
 # Frecce 3D
 
 Puzzle 3D per iPhone (web app installabile): un solido ricoperto di frecce.
+I solidi cambiano a ogni livello: cubo, lastra, L, scala, T, U, ziggurat,
+croce, cubo intagliato, anello (con tunnel), H, croce 3D.
 Ruota il solido con le dita e tocca le frecce per liberarle.
 
 ## Regole
 - Ogni freccia scorre solo nel verso in cui punta.
-- Se la strada fino al bordo della faccia è libera, la freccia scivola via.
+- La freccia scorre sulla superficie, sale anche sulle pareti interne, e vola via
+  dal primo spigolo sporgente, se la strada è libera.
 - Se incontra un'altra freccia si scontra e perdi una vita (3 vite per livello).
 - Le frecce possono piegarsi e girare attorno agli spigoli del solido.
 - Ogni livello è generato in modo da avere sempre almeno una soluzione.
+- La difficoltà cresce a ogni livello: le frecce si bloccano a catena e all'inizio
+  ne sono libere sempre meno.
 - 3 suggerimenti per livello (la lampadina evidenzia una freccia libera e ruota il solido per mostrarla).
 
 ## Comandi
