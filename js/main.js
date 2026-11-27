@@ -609,7 +609,13 @@ $('play').onclick = startGame;
 $('back').onclick = goHome;
 $('hint').onclick = useHint;
 $('recenter').onclick = () => { targetQ = DEFAULT_Q.clone(); zoom = 1; panGoal = { x: 0, y: 0 }; };
-$('restart').onclick = () => { loadLevel(); toast('Livello ricominciato'); };
+$('restart').onclick = () => {
+  if (!game || !game.playing) return;
+  showModal('Ricominciare il livello?', 'Le frecce liberate finora torneranno al loro posto e ripartirai con tutte le vite.', [
+    { label: 'Ricomincia', cls: 'primary', fn: () => { hideModal(); loadLevel(); toast('Livello ricominciato'); } },
+    { label: 'Annulla', cls: 'ghost', fn: hideModal },
+  ], true);
+};
 
 const HOWTO = 'Ogni freccia scorre solo nel verso in cui punta.\n\n' +
   '• Trascina con un dito per ruotare il solido.\n' +
